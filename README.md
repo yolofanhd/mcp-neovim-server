@@ -2,6 +2,8 @@
 
 A proof of concept integration between Claude Desktop and Neovim using Model Context Protocol (MCP) and the official neovim/node-client JavaScript library. This demo leverages Vim's native text editing commands and workflows, which Claude already understands, to create a lightweight code assistance layer.
 
+<a href="https://glama.ai/mcp/servers/s0fywdwp87"><img width="380" height="200" src="https://glama.ai/mcp/servers/s0fywdwp87/badge" alt="mcp-neovim-server MCP server" /></a>
+
 ## Features
 
 - Connects to your nvim instance if you expose `--listen /tmp/nvim` when starting nvim
