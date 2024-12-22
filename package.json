@@ -1,8 +1,7 @@
 {
-  "name": "@bigcodegen/mcp-neovim-server",
+  "name": "mcp-neovim-server",
   "version": "0.1.0",
   "description": "An MCP server for neovim",
-  "private": true,
   "type": "module",
   "bin": {
     "mcp-neovim-server": "./build/index.js"
