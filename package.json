@@ -15,6 +15,10 @@
     "watch": "tsc --watch",
     "inspector": "npx @modelcontextprotocol/inspector build/index.js"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bigcodegen/mcp-neovim-server.git"
+  },
   "author": "bigcodegen",
   "license": "MIT",
   "bugs": {
