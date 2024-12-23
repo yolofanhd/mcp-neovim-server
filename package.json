@@ -4,7 +4,7 @@
   "description": "An MCP server for neovim",
   "type": "module",
   "bin": {
-    "mcp-neovim-server": "./build/index.js"
+    "mcp-neovim-server": "build/index.js"
   },
   "files": [
     "build"
