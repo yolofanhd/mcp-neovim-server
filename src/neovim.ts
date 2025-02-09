@@ -7,6 +7,13 @@ interface NeovimStatus {
   fileName: string;
 }
 
+interface BufferInfo {
+  number: number;
+  name: string;
+  isListed: boolean;
+  isLoaded: boolean;
+}
+
 export class NeovimManager {
   private static instance: NeovimManager;
 
@@ -122,6 +129,34 @@ export class NeovimManager {
     } catch (error) {
       console.error('Error editing lines:', error);
       return 'Error editing lines';
+    }
+  }
+
+  public async getOpenBuffers(): Promise<BufferInfo[]> {
+    try {
+      const nvim = await this.connect();
+      const buffers = await nvim.buffers;
+      const bufferInfos: BufferInfo[] = [];
+
+      for (const buffer of buffers) {
+        const [isLoaded, isListedOption] = await Promise.all([
+          buffer.loaded,
+          buffer.getOption('buflisted')
+        ]);
+        const isListed = Boolean(isListedOption);
+
+        bufferInfos.push({
+          number: buffer.id,
+          name: await buffer.name,
+          isListed,
+          isLoaded
+        });
+      }
+
+      return bufferInfos;
+    } catch (error) {
+      console.error('Error getting open buffers:', error);
+      return [];
     }
   }
 }
