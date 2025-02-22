@@ -5,6 +5,30 @@ interface NeovimStatus {
   mode: string;
   visualSelection: string;
   fileName: string;
+  windowLayout: string;
+  currentTab: number;
+  marks: { [key: string]: [number, number] };
+  registers: { [key: string]: string };
+  cwd: string;
+}
+
+interface BufferInfo {
+  number: number;
+  name: string;
+  isListed: boolean;
+  isLoaded: boolean;
+  modified: boolean;
+  syntax: string;
+  windowIds: number[];
+}
+
+interface WindowInfo {
+  id: number;
+  bufferId: number;
+  width: number;
+  height: number;
+  row: number;
+  col: number;
 }
 
 export class NeovimManager {
@@ -78,12 +102,47 @@ export class NeovimManager {
       const cursor = await window.cursor;
       const mode = await nvim.mode;
       const buffer = await nvim.buffer;
+      
+      // Get window layout
+      const layout = await nvim.eval('winlayout()');
+      const tabpage = await nvim.tabpage;
+      const currentTab = await tabpage.number;
+
+      // Get marks (a-z)
+      const marks: { [key: string]: [number, number] } = {};
+      for (const mark of 'abcdefghijklmnopqrstuvwxyz') {
+        try {
+          const pos = await nvim.eval(`getpos("'${mark}")`) as [number, number, number, number];
+          marks[mark] = [pos[1], pos[2]];
+        } catch (e) {
+          // Mark not set
+        }
+      }
+
+      // Get registers (a-z, ", 0-9)
+      const registers: { [key: string]: string } = {};
+      const registerNames = [...'abcdefghijklmnopqrstuvwxyz', '"', ...Array(10).keys()];
+      for (const reg of registerNames) {
+        try {
+          registers[reg] = String(await nvim.eval(`getreg('${reg}')`));
+        } catch (e) {
+          // Register empty
+        }
+      }
+
+      // Get current working directory
+      const cwd = await nvim.call('getcwd');
 
       const neovimStatus: NeovimStatus = {
         cursorPosition: cursor,
         mode: mode.mode,
         visualSelection: '',
-        fileName: await buffer.name
+        fileName: await buffer.name,
+        windowLayout: JSON.stringify(layout),
+        currentTab,
+        marks,
+        registers,
+        cwd
       };
 
       if (mode.mode.startsWith('v')) {
@@ -122,6 +181,155 @@ export class NeovimManager {
     } catch (error) {
       console.error('Error editing lines:', error);
       return 'Error editing lines';
+    }
+  }
+
+  public async getWindows(): Promise<WindowInfo[]> {
+    try {
+      const nvim = await this.connect();
+      const windows = await nvim.windows;
+      const windowInfos: WindowInfo[] = [];
+
+      for (const win of windows) {
+        const buffer = await win.buffer;
+        const [width, height] = await Promise.all([
+          win.width,
+          win.height
+        ]);
+        const position = await win.position;
+
+        windowInfos.push({
+          id: win.id,
+          bufferId: buffer.id,
+          width,
+          height,
+          row: position[0],
+          col: position[1]
+        });
+      }
+
+      return windowInfos;
+    } catch (error) {
+      console.error('Error getting windows:', error);
+      return [];
+    }
+  }
+
+  public async manipulateWindow(command: string): Promise<string> {
+    const validCommands = ['split', 'vsplit', 'only', 'close', 'wincmd h', 'wincmd j', 'wincmd k', 'wincmd l'];
+    if (!validCommands.some(cmd => command.startsWith(cmd))) {
+      return 'Invalid window command';
+    }
+
+    try {
+      const nvim = await this.connect();
+      await nvim.command(command);
+      return 'Window command executed';
+    } catch (error) {
+      console.error('Error manipulating window:', error);
+      return 'Error executing window command';
+    }
+  }
+
+  public async setMark(mark: string, line: number, col: number): Promise<string> {
+    if (!/^[a-z]$/.test(mark)) {
+      return 'Invalid mark name (must be a-z)';
+    }
+
+    try {
+      const nvim = await this.connect();
+      await nvim.command(`mark ${mark}`);
+      const window = await nvim.window;
+      await (window.cursor = [line, col]);
+      return `Mark ${mark} set at line ${line}, column ${col}`;
+    } catch (error) {
+      console.error('Error setting mark:', error);
+      return 'Error setting mark';
+    }
+  }
+
+  public async setRegister(register: string, content: string): Promise<string> {
+    const validRegisters = [...'abcdefghijklmnopqrstuvwxyz"'];
+    if (!validRegisters.includes(register)) {
+      return 'Invalid register name';
+    }
+
+    try {
+      const nvim = await this.connect();
+      await nvim.eval(`setreg('${register}', '${content.replace(/'/g, "''")}')`);
+      return `Register ${register} set`;
+    } catch (error) {
+      console.error('Error setting register:', error);
+      return 'Error setting register';
+    }
+  }
+
+  public async visualSelect(startLine: number, startCol: number, endLine: number, endCol: number): Promise<string> {
+    try {
+      const nvim = await this.connect();
+      const window = await nvim.window;
+      
+      // Enter visual mode
+      await nvim.command('normal! v');
+      
+      // Move cursor to start position
+      await (window.cursor = [startLine, startCol]);
+      
+      // Move cursor to end position (selection will be made)
+      await (window.cursor = [endLine, endCol]);
+      
+      return 'Visual selection made';
+    } catch (error) {
+      console.error('Error making visual selection:', error);
+      return 'Error making visual selection';
+    }
+  }
+
+  public async getOpenBuffers(): Promise<BufferInfo[]> {
+    try {
+      const nvim = await this.connect();
+      const buffers = await nvim.buffers;
+      const windows = await nvim.windows;
+      const bufferInfos: BufferInfo[] = [];
+
+      for (const buffer of buffers) {
+        const [
+          isLoaded,
+          isListedOption,
+          modified,
+          syntax
+        ] = await Promise.all([
+          buffer.loaded,
+          buffer.getOption('buflisted'),
+          buffer.getOption('modified'),
+          buffer.getOption('syntax')
+        ]);
+        const isListed = Boolean(isListedOption);
+
+        // Find windows containing this buffer
+        const windowIds = [];
+        for (const win of windows) {
+          const winBuffer = await win.buffer;
+          if (winBuffer.id === buffer.id) {
+            windowIds.push(win.id);
+          }
+        }
+
+        bufferInfos.push({
+          number: buffer.id,
+          name: await buffer.name,
+          isListed,
+          isLoaded,
+          modified: Boolean(modified),
+          syntax: String(syntax),
+          windowIds
+        });
+      }
+
+      return bufferInfos;
+    } catch (error) {
+      console.error('Error getting open buffers:', error);
+      return [];
     }
   }
 }

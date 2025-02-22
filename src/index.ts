@@ -18,7 +18,7 @@ import { NeovimManager } from "./neovim.js";
 const server = new Server(
   {
     name: "mcp-neovim-server",
-    version: "0.1.0",
+    version: "0.3.0",
   },
   {
     capabilities: {
@@ -32,12 +32,20 @@ const neovimManager = NeovimManager.getInstance();
 
 server.setRequestHandler(ListResourcesRequestSchema, async () => {
   return {
-    resources: [{
-      uri: `nvim://session`,
-      mimeType: "text/plain",
-      name: "Current neovim session",
-      description: `Current neovim text editor session`
-    }]
+    resources: [
+      {
+        uri: `nvim://session`,
+        mimeType: "text/plain",
+        name: "Current neovim session",
+        description: `Current neovim text editor session`
+      },
+      {
+        uri: `nvim://buffers`,
+        mimeType: "application/json",
+        name: "Open Neovim buffers",
+        description: "List of all open buffers in the current Neovim session"
+      }
+    ]
   };
 });
 
@@ -47,17 +55,31 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
     throw new Error("Invalid resource URI");
   }
 
-  const bufferContents = await neovimManager.getBufferContents();
+  const resourcePath = request.params.uri.substring(6); // Remove "nvim://"
 
-  return {
-    contents: [{
-      uri: request.params.uri,
-      mimeType: "text/plain",
-      text: Array.from(bufferContents.entries())
-        .map(([lineNum, lineText]) => `${lineNum}: ${lineText}`)
-        .join('\n')
-    }]
-  };
+  if (resourcePath === "session") {
+    const bufferContents = await neovimManager.getBufferContents();
+    return {
+      contents: [{
+        uri: request.params.uri,
+        mimeType: "text/plain",
+        text: Array.from(bufferContents.entries())
+          .map(([lineNum, lineText]) => `${lineNum}: ${lineText}`)
+          .join('\n')
+      }]
+    };
+  } else if (resourcePath === "buffers") {
+    const openBuffers = await neovimManager.getOpenBuffers();
+    return {
+      contents: [{
+        uri: request.params.uri,
+        mimeType: "application/json",
+        text: JSON.stringify(openBuffers, null, 2)
+      }]
+    };
+  }
+
+  throw new Error("Invalid resource path");
 });
 
 const VIM_BUFFER: Tool = {
@@ -129,7 +151,103 @@ const VIM_EDIT: Tool = {
   }
 };
 
-const NEOVIM_TOOLS = [VIM_BUFFER, VIM_COMMAND, VIM_STATUS, VIM_EDIT] as const;
+const VIM_WINDOW: Tool = {
+  name: "vim_window",
+  description: "Manipulate Neovim windows (split, close, navigate)",
+  inputSchema: {
+    type: "object",
+    properties: {
+      command: {
+        type: "string",
+        description: "Window command (split, vsplit, only, close, wincmd h/j/k/l)",
+        enum: ["split", "vsplit", "only", "close", "wincmd h", "wincmd j", "wincmd k", "wincmd l"]
+      }
+    },
+    required: ["command"]
+  }
+};
+
+const VIM_MARK: Tool = {
+  name: "vim_mark",
+  description: "Set a mark at a specific position",
+  inputSchema: {
+    type: "object",
+    properties: {
+      mark: {
+        type: "string",
+        description: "Mark name (a-z)",
+        pattern: "^[a-z]$"
+      },
+      line: {
+        type: "number",
+        description: "Line number"
+      },
+      column: {
+        type: "number",
+        description: "Column number"
+      }
+    },
+    required: ["mark", "line", "column"]
+  }
+};
+
+const VIM_REGISTER: Tool = {
+  name: "vim_register",
+  description: "Set content of a register",
+  inputSchema: {
+    type: "object",
+    properties: {
+      register: {
+        type: "string",
+        description: "Register name (a-z or \")",
+        pattern: "^[a-z\"]$"
+      },
+      content: {
+        type: "string",
+        description: "Content to store in register"
+      }
+    },
+    required: ["register", "content"]
+  }
+};
+
+const VIM_VISUAL: Tool = {
+  name: "vim_visual",
+  description: "Make a visual selection",
+  inputSchema: {
+    type: "object",
+    properties: {
+      startLine: {
+        type: "number",
+        description: "Starting line number"
+      },
+      startColumn: {
+        type: "number",
+        description: "Starting column number"
+      },
+      endLine: {
+        type: "number",
+        description: "Ending line number"
+      },
+      endColumn: {
+        type: "number",
+        description: "Ending column number"
+      }
+    },
+    required: ["startLine", "startColumn", "endLine", "endColumn"]
+  }
+};
+
+const NEOVIM_TOOLS = [
+  VIM_BUFFER,
+  VIM_COMMAND,
+  VIM_STATUS,
+  VIM_EDIT,
+  VIM_WINDOW,
+  VIM_MARK,
+  VIM_REGISTER,
+  VIM_VISUAL
+] as const;
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: NEOVIM_TOOLS,
@@ -152,6 +270,51 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { startLine, mode, lines } = request.params.arguments as { startLine: number, mode: 'insert' | 'replace', lines: string };
       console.error(`Editing lines: ${startLine}, ${mode}, ${lines}`);
       const result = await neovimManager.editLines(startLine, mode, lines);
+      return {
+        content: [{
+          type: "text",
+          text: result
+        }]
+      };
+    }
+    case "vim_window": {
+      const { command } = request.params.arguments as { command: string };
+      const result = await neovimManager.manipulateWindow(command);
+      return {
+        content: [{
+          type: "text",
+          text: result
+        }]
+      };
+    }
+    case "vim_mark": {
+      const { mark, line, column } = request.params.arguments as { mark: string; line: number; column: number };
+      const result = await neovimManager.setMark(mark, line, column);
+      return {
+        content: [{
+          type: "text",
+          text: result
+        }]
+      };
+    }
+    case "vim_register": {
+      const { register, content } = request.params.arguments as { register: string; content: string };
+      const result = await neovimManager.setRegister(register, content);
+      return {
+        content: [{
+          type: "text",
+          text: result
+        }]
+      };
+    }
+    case "vim_visual": {
+      const { startLine, startColumn, endLine, endColumn } = request.params.arguments as {
+        startLine: number;
+        startColumn: number;
+        endLine: number;
+        endColumn: number;
+      };
+      const result = await neovimManager.visualSelect(startLine, startColumn, endLine, endColumn);
       return {
         content: [{
           type: "text",
