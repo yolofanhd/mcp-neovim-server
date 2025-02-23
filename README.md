@@ -62,6 +62,12 @@ Using this simple set of tools, Claude can peer into your neovim session to answ
 - Error handling could be better.
 - Sometimes Claude doesn't get the vim command input just right.
 
+## Configuration
+
+### Environment Variables
+
+- `ALLOW_SHELL_COMMANDS`: Set to 'true' to enable shell command execution (e.g. `!ls`). Defaults to false for security.
+
 ## Usage with Claude Desktop
 Add this to your `claude_desktop_config.json`:
 ```json
@@ -72,7 +78,10 @@ Add this to your `claude_desktop_config.json`:
       "args": [
         "-y",
         "mcp-neovim-server"
-      ]
+      ],
+      "env": {
+        "ALLOW_SHELL_COMMANDS": "true"
+      }
     }
   }
 }
