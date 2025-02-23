@@ -75,12 +75,34 @@ export class NeovimManager {
   public async sendCommand(command: string): Promise<string> {
     try {
       const nvim = await this.connect();
+
+      // Remove leading colon if present
+      const normalizedCommand = command.startsWith(':') ? command.substring(1) : command;
+
+      // Handle shell commands (starting with !)
+      if (normalizedCommand.startsWith('!')) {
+        if (process.env.ALLOW_SHELL_COMMANDS !== 'true') {
+          return 'Shell command execution is disabled. Set ALLOW_SHELL_COMMANDS=true environment variable to enable shell commands.';
+        }
+
+        try {
+          const shellCommand = normalizedCommand.substring(1).trim();
+          // Execute the command and capture output directly
+          const output = await nvim.eval(`system('${shellCommand.replace(/'/g, "''")}')`);
+          if (output) {
+            return String(output).trim();
+          }
+          return 'No output from command';
+        } catch (error) {
+          console.error('Shell command error:', error);
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+          return `Error executing shell command: ${errorMessage}`;
+        }
+      }
+
+      // For regular Vim commands
       await nvim.setVvar('errmsg', '');
-      await nvim.feedKeys(
-        await nvim.replaceTermcodes(command + '<cr>', true, true, true),
-        'n',
-        false
-      );
+      await nvim.command(normalizedCommand);
 
       const vimerr = await nvim.getVvar('errmsg');
       if (vimerr) {

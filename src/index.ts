@@ -18,7 +18,7 @@ import { NeovimManager } from "./neovim.js";
 const server = new Server(
   {
     name: "mcp-neovim-server",
-    version: "0.3.0",
+    version: "0.3.1"
   },
   {
     capabilities: {
@@ -99,13 +99,13 @@ const VIM_BUFFER: Tool = {
 
 const VIM_COMMAND: Tool = {
   name: "vim_command",
-  description: "Send a command to VIM for navigation, spot editing, and line deletion.",
+  description: "Send a command to VIM for navigation, spot editing, and line deletion. For shell commands like ls, use without the leading colon (e.g. '!ls' not ':!ls').",
   inputSchema: {
     type: "object",
     properties: {
       command: {
         type: "string",
-        description: "Neovim command to enter for navigation and spot editing. Insert <esc> to return to NORMAL mode. It is possible to send multiple commands separated with <cr>."
+        description: "Neovim command to enter for navigation and spot editing. For shell commands use without leading colon (e.g. '!ls'). Insert <esc> to return to NORMAL mode. It is possible to send multiple commands separated with <cr>."
       }
     },
     required: ["command"]
@@ -329,10 +329,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 async function handleCommand(command: string) {
   console.error(`Executing command: ${command}`);
+  
+  // Check if this is a shell command
+  if (command.startsWith('!')) {
+    const allowShellCommands = process.env.ALLOW_SHELL_COMMANDS === 'true';
+    if (!allowShellCommands) {
+      return {
+        content: [{
+          type: "text",
+          text: "Shell command execution is disabled. Set ALLOW_SHELL_COMMANDS=true environment variable to enable shell commands."
+        }]
+      };
+    }
+  }
+
   const result = await neovimManager.sendCommand(command);
   return {
     content: [{
-      type: "text",
+      type: "text", 
       text: result
     }]
   };
