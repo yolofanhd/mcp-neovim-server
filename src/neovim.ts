@@ -45,8 +45,9 @@ export class NeovimManager {
 
   private async connect(): Promise<Neovim> {
     try {
+      const socketPath = process.env.NVIM_SOCKET_PATH || '/tmp/nvim';
       return attach({
-        socket: '/tmp/nvim'
+        socket: socketPath
       });
     } catch (error) {
       console.error('Error connecting to Neovim:', error);
