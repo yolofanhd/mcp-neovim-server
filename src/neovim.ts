@@ -186,13 +186,20 @@ export class NeovimManager {
     }
   }
 
-  public async editLines(startLine: number, mode: 'replace' | 'insert', newText: string): Promise<string> {
+  public async editLines(startLine: number, mode: 'replace' | 'insert' | 'replaceAll', newText: string): Promise<string> {
     try {
       const nvim = await this.connect();
       const splitByLines = newText.split('\n');
       const buffer = await nvim.buffer;
 
-      if (mode === 'replace') {
+      if (mode === 'replaceAll') {
+        // Handle full buffer replacement
+        const lineCount = await buffer.length;
+        // Delete all lines and then append new content
+        await buffer.remove(0, lineCount, true);
+        await buffer.insert(splitByLines, 0);
+        return 'Buffer completely replaced';
+      } else if (mode === 'replace') {
         await buffer.replace(splitByLines, startLine - 1);
         return 'Lines replaced successfully';
       } else if (mode === 'insert') {
