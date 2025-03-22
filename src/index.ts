@@ -133,7 +133,7 @@ server.tool(
   "vim_edit",
   { 
     startLine: z.number().describe("The line number where editing should begin (1-indexed)"),
-    mode: z.enum(["insert", "replace"]).describe("Whether to insert new content or replace existing content"),
+    mode: z.enum(["insert", "replace", "replaceAll"]).describe("Whether to insert new content, replace existing content, or replace entire buffer"),
     lines: z.string().describe("The text content to insert or use as replacement")
   },
   async ({ startLine, mode, lines }) => {
@@ -218,6 +218,11 @@ server.tool(
     };
   }
 );
+
+// Register an empty prompts list since we don't support any prompts. Clients still ask.
+server.prompt("empty", {}, () => ({
+  messages: []
+}));
 
 /**
  * Start the server using stdio transport.
