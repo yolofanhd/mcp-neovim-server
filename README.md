@@ -33,9 +33,11 @@ A proof of concept integration between Claude Desktop (or any client) and Neovim
   - Get the status of the VIM editor
   - Status contains cursor position, mode, filename, visual selection, window layout, current tab, marks, registers, and working directory
 - **vim_edit**
-  - Edit lines using insert or replace in the VIM editor
-  - Input `startLine` (number), `mode` (`"insert"` | `"replace"`), `lines` (string)
-  - insert will insert lines at startLine. replace will replace lines starting at the startLine to the end of the buffer
+  - Edit lines using insert, replace, or replaceAll in the VIM editor
+  - Input `startLine` (number), `mode` (`"insert"` | `"replace"` | `"replaceAll"`), `lines` (string)
+  - insert will insert lines at startLine
+  - replace will replace lines starting at startLine
+  - replaceAll will replace the entire buffer contents
 - **vim_window**
   - Manipulate Neovim windows (split, vsplit, close, navigate)
   - Input `command` (string: "split", "vsplit", "only", "close", "wincmd h/j/k/l")
