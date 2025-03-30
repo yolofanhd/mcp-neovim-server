@@ -103,15 +103,19 @@ export class NeovimManager {
 
       // For regular Vim commands
       await nvim.setVvar('errmsg', '');
-      await nvim.command(normalizedCommand);
-
+      
+      // Execute the command and capture its output using the execute() function
+      const output = await nvim.call('execute', [normalizedCommand]);
+      
+      // Check for errors
       const vimerr = await nvim.getVvar('errmsg');
       if (vimerr) {
         console.error('Vim error:', vimerr);
         return `Error executing command: ${vimerr}`;
       }
 
-      return 'Command executed';
+      // Return the actual command output if any
+      return output ? String(output).trim() : 'Command executed (no output)';
     } catch (error) {
       console.error('Error sending command:', error);
       return 'Error executing command';
